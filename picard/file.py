@@ -196,7 +196,8 @@ class File(QtCore.QObject, Item):
                 self.set_acoustid_fingerprint(fingerprints[0])
         run_file_post_load_processors(self)
         self.update()
-        callback(self)
+        #callback(self)
+
 
     def _copy_loaded_metadata(self, metadata):
         filename, _ = os.path.splitext(self.base_filename)

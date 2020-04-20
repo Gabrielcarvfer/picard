@@ -144,7 +144,7 @@ def _patched_shutil_copystat(src, dst, *, follow_symlinks=True):
 _orig_shutil_copystat = shutil.copystat
 shutil.copystat = _patched_shutil_copystat
 
-
+import threading
 class Tagger(QtWidgets.QApplication):
 
     tagger_stats_changed = QtCore.pyqtSignal()
@@ -286,6 +286,10 @@ class Tagger(QtWidgets.QApplication):
         self.window = MainWindow()
         self.exit_cleanup = []
         self.stopping = False
+
+
+        self.loadingThread = None
+        self.loadJobs = []
 
         # Load release version information
         if self.autoupdate_enabled:
@@ -480,6 +484,29 @@ class Tagger(QtWidgets.QApplication):
         elif isinstance(target, ClusterList):
             self.cluster(files)
 
+    @staticmethod
+    def _loader_thread(target):
+        import time
+        tagger = Tagger.instance()
+        while not tagger.stopping and len(tagger.loadJobs) > 0:
+            new_files = tagger.loadJobs.pop(0)
+
+            log.debug("Adding files %r", new_files)
+            new_files.sort(key=lambda x: x.filename)
+
+            if target is None or target is tagger.unclustered_files:
+                tagger.unclustered_files.add_files(new_files)
+                target = None
+
+            for file in new_files:
+                file.load(file)
+
+            for file in new_files:
+                tagger._file_loaded(file, target=target)
+
+            time.sleep(1) #give time to the UI before continuing
+        #kill thread when finished the work
+
     def add_files(self, filenames, target=None):
         """Add files to the tagger."""
         ignoreregex = None
@@ -509,84 +536,59 @@ class Tagger(QtWidgets.QApplication):
                     self.files[filename] = file
                     new_files.append(file)
         if new_files:
-            log.debug("Adding files %r", new_files)
-            new_files.sort(key=lambda x: x.filename)
-            if target is None or target is self.unclustered_files:
-                self.unclustered_files.add_files(new_files)
-                target = None
-            for file in new_files:
-                file.load(partial(self._file_loaded, target=target))
+            new_files_jobs = []
+
+            num_files = len(new_files)
+            rem_files_per_job = num_files % 100
+            num_jobs  = (num_files/100) + (1 if rem_files_per_job > 0 else 0)
+            for i in range(int(num_jobs)):
+                self.loadJobs += [new_files[i*100:(i+1)*100]]
+
+            if self.loadingThread is None:
+                self.loadingThread = threading.Thread(target=Tagger._loader_thread, args=[target]).start()
 
     def add_directory(self, path):
-        if config.setting['recursively_add_files']:
-            self._add_directory_recursive(path)
-        else:
-            self._add_directory_non_recursive(path)
+        self._add_directory(path, config.setting['recursively_add_files'])
 
-    def _add_directory_recursive(self, path):
+
+    def _add_directory(self, path, recursive=False):
+        if not os.path.exists(path) or not os.path.isdir(path):
+            return
+
         ignore_hidden = config.setting["ignore_hidden_files"]
-        walk = os.walk(path)
+        new_files = []
 
-        def get_files():
-            try:
-                root, dirs, files = next(walk)
-                if ignore_hidden:
-                    dirs[:] = [d for d in dirs if not is_hidden(os.path.join(root, d))]
-            except StopIteration:
-                return None
-            else:
-                number_of_files = len(files)
-                if number_of_files:
-                    mparms = {
-                        'count': number_of_files,
-                        'directory': root,
-                    }
-                    log.debug("Adding %(count)d files from '%(directory)r'" %
-                              mparms)
-                    self.window.set_statusbar_message(
-                        ngettext(
-                            "Adding %(count)d file from '%(directory)s' ...",
-                            "Adding %(count)d files from '%(directory)s' ...",
-                            number_of_files),
-                        mparms,
-                        translate=None,
-                        echo=None
-                    )
-                return (os.path.join(root, f) for f in files)
+        for root, dirs, files in os.walk(path):
+            if ignore_hidden and is_hidden(root):
+                continue
+            for file in files:
+                new_files.append(os.path.join(root, file))
+            number_of_files = len(files)
+            if number_of_files:
+                mparms = {
+                    'count': number_of_files,
+                    'directory': root,
+                }
+                log.debug("Adding %(count)d files from '%(directory)r'" %
+                          mparms)
+                self.window.set_statusbar_message(
+                    ngettext(
+                        "Adding %(count)d file from '%(directory)s' ...",
+                        "Adding %(count)d files from '%(directory)s' ...",
+                        number_of_files),
+                    mparms,
+                    translate=None,
+                    echo=None
+                )
+            if not recursive:
+                break
 
-        def process(result=None, error=None):
-            if result:
-                if error is None:
-                    self.add_files(result)
-                thread.run_task(get_files, process)
-
-        process(True, False)
-
-    def _add_directory_non_recursive(self, path):
-        files = []
-        for f in os.listdir(path):
-            listing = os.path.join(path, f)
-            if os.path.isfile(listing):
-                files.append(listing)
-        number_of_files = len(files)
-        if number_of_files:
-            mparms = {
-                'count': number_of_files,
-                'directory': path,
-            }
-            log.debug("Adding %(count)d files from '%(directory)r'" %
-                      mparms)
-            self.window.set_statusbar_message(
-                ngettext(
-                    "Adding %(count)d file from '%(directory)s' ...",
-                    "Adding %(count)d files from '%(directory)s' ...",
-                    number_of_files),
-                mparms,
-                translate=None,
-                echo=None
-            )
+        if new_files:
+            print()
             # Function call only if files exist
-            self.add_files(files)
+            self.add_files(new_files)
+            pass
+        pass
 
     def get_file_lookup(self):
         """Return a FileLookup object."""
