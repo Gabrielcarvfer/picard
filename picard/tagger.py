@@ -292,6 +292,7 @@ class Tagger(QtWidgets.QApplication):
         self.loadJobs = []
         self.savingThread = None
         self.savingJobs = []
+        self.directoryThread = None
 
         # Load release version information
         if self.autoupdate_enabled:
@@ -551,6 +552,12 @@ class Tagger(QtWidgets.QApplication):
 
         #kill thread when finished the work
 
+    @staticmethod
+    def _directory_thread(path, recursive):
+        from picard.tagger import Tagger
+        tagger = Tagger.instance()
+        tagger._add_directory(path, recursive)
+
 
     def add_files(self, filenames, target=None):
         """Add files to the tagger."""
@@ -593,7 +600,9 @@ class Tagger(QtWidgets.QApplication):
                 self.loadingThread = threading.Thread(target=Tagger._loader_thread, args=[target]).start()
 
     def add_directory(self, path):
-        self._add_directory(path, config.setting['recursively_add_files'])
+        #self._add_directory(path, config.setting['recursively_add_files'])
+        if self.directoryThread is None:
+            self.directoryThread = threading.Thread(target=Tagger._directory_thread, args=[path, config.setting['recursively_add_files']]).start()
 
 
     def _add_directory(self, path, recursive=False):
