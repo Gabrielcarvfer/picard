@@ -53,11 +53,8 @@ from picard.metadata import (
 from picard.plugin import ExtensionPoint
 from picard.util import uniqify
 
+markdown = None
 
-try:
-    from markdown import markdown
-except ImportError:
-    markdown = None
 
 
 class ScriptError(Exception):
@@ -181,6 +178,13 @@ class FunctionRegistryItem:
         return self._postprocess(ret, postprocessor)
 
     def htmldoc(self, postprocessor=None):
+        global markdown
+        if markdown is None:
+            try:
+                from markdown import markdown
+            except ImportError:
+                markdown = None
+
         if markdown is not None:
             ret = markdown(self.markdowndoc())
         else:
