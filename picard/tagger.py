@@ -534,7 +534,7 @@ class Tagger(QtWidgets.QApplication):
                 file = open_file(filename)
                 if file:
                     self.files[filename] = file
-                    new_files.append(file)
+                    new_files.extend([file])
         if new_files:
             new_files_jobs = []
 
@@ -542,7 +542,7 @@ class Tagger(QtWidgets.QApplication):
             rem_files_per_job = num_files % 100
             num_jobs  = (num_files/100) + (1 if rem_files_per_job > 0 else 0)
             for i in range(int(num_jobs)):
-                self.loadJobs += [new_files[i*100:(i+1)*100]]
+                self.loadJobs.extend([new_files[i*100:(i+1)*100]])
 
             if self.loadingThread is None:
                 self.loadingThread = threading.Thread(target=Tagger._loader_thread, args=[target]).start()
@@ -562,7 +562,7 @@ class Tagger(QtWidgets.QApplication):
             if ignore_hidden and is_hidden(root):
                 continue
             for file in files:
-                new_files.append(os.path.join(root, file))
+                new_files.extend([os.path.join(root, file)])
             number_of_files = len(files)
             if number_of_files:
                 mparms = {
