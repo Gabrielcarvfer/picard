@@ -125,8 +125,22 @@ class File(QtCore.QObject, Item):
     # files is cached, set @state.setter
     num_pending_files = 0
 
+    once = True
+    timer = None
+    files_to_update_periodically_dict = {}
+    periodicLock = None
     def __init__(self, filename):
         super().__init__()
+
+        if File.once:
+            import threading
+            File.periodicLock = threading.RLock()
+            File.timer = QtCore.QTimer()
+            File.timer.setInterval(5000)  # Throw event timeout with an interval of 5 seconds
+            File.timer.timeout.connect(File.periodicUpdate)  # each time timer counts a second, call update
+            File.timer.start()
+            File.once = False
+
         self.filename = filename
         self.base_filename = os.path.basename(filename)
         self._state = File.UNDEFINED
@@ -147,6 +161,7 @@ class File(QtCore.QObject, Item):
 
     def __repr__(self):
         return '<%s %r>' % (type(self).__name__, self.base_filename)
+
 
     @property
     def new_metadata(self):
@@ -587,6 +602,37 @@ class File(QtCore.QObject, Item):
         return self.similarity == 1.0 and self.state == File.NORMAL
 
     def update(self, signal=True):
+        with File.periodicLock:
+            File.files_to_update_periodically_dict[self] = (signal)
+
+
+    @staticmethod
+    def periodicUpdate():
+        File.timer.stop()
+
+        from picard.tagger import Tagger
+        tagger = Tagger.instance()
+
+        #Prevent competition with worker threads
+        tagger.priority_thread_pool.reserveThread()
+
+        #Prevent concurrent access to the list of files to update
+        with File.periodicLock:
+            files_to_update = list(File.files_to_update_periodically_dict.items())[:100] #pick up to 100 items to update
+            for (file, signal) in files_to_update:
+                File.files_to_update_periodically_dict.pop(file)
+
+        if len(files_to_update) > 0:
+            for (file, signal) in files_to_update:
+                file._update(signal)
+
+        #Release worker threads
+        tagger.priority_thread_pool.releaseThread()
+
+
+        File.timer.start()
+
+    def _update(self, signal=True):
         new_metadata = self.new_metadata
         names = set(new_metadata.keys())
         names.update(self.orig_metadata.keys())
