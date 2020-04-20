@@ -490,7 +490,12 @@ class Tagger(QtWidgets.QApplication):
     def _loader_thread(target):
         import time
         tagger = Tagger.instance()
+
+        #Prevent competition with worker threads
+        tagger.priority_thread_pool.reserveThread()
+
         while not tagger.stopping and len(tagger.loadJobs) > 0:
+
             new_files = tagger.loadJobs.pop(0)
 
             log.debug("Adding files %r", new_files)
@@ -506,7 +511,12 @@ class Tagger(QtWidgets.QApplication):
             for file in new_files:
                 tagger._file_loaded(file, target=target)
 
+
             time.sleep(0.2) #give time to the UI before continuing
+
+        #Release worker thread
+        tagger.priority_thread_pool.releaseThread()
+
         #kill thread when finished the work
 
     @staticmethod
@@ -514,6 +524,10 @@ class Tagger(QtWidgets.QApplication):
         import time
         from picard.metadata import Metadata
         tagger = Tagger.instance()
+
+        #Prevent competition with worker threads
+        tagger.priority_thread_pool.reserveThread()
+
         while not tagger.stopping and len(tagger.savingJobs) > 0:
             files = tagger.savingJobs.pop(0)
 
@@ -531,7 +545,12 @@ class Tagger(QtWidgets.QApplication):
                 file._saving_finished(filename)
 
             time.sleep(0.2) #give time to the UI before continuing
+
+        #Release worker thread
+        tagger.priority_thread_pool.releaseThread()
+
         #kill thread when finished the work
+
 
     def add_files(self, filenames, target=None):
         """Add files to the tagger."""
