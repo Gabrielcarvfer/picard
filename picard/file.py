@@ -616,6 +616,7 @@ class File(QtCore.QObject, Item):
         #Prevent competition with worker threads
         tagger.priority_thread_pool.reserveThread()
 
+        files_to_update = []
         #Prevent concurrent access to the list of files to update
         with File.periodicLock:
             files_to_update = list(File.files_to_update_periodically_dict.items())[:100] #pick up to 100 items to update

@@ -604,6 +604,21 @@ class Tagger(QtWidgets.QApplication):
     def add_directory(self, path):
         threading.Thread(target=Tagger._directory_thread, args=[path, config.setting['recursively_add_files']]).start()
 
+    @staticmethod
+    def _scan_dir(*args):
+        ignore_hidden = args[0]
+        folders = args[1]
+        files = []
+        local_folders = list(folders)
+        while len(local_folders) > 0:
+            for entry in os.scandir(local_folders.pop(0)):
+                if ignore_hidden and is_hidden(entry.path):
+                    continue
+                if entry.is_dir():
+                    local_folders.extend([entry.path])
+                else:
+                    files.extend([entry.path])
+        return files
 
     def _add_directory(self, path, recursive=False):
         if not os.path.exists(path) or not os.path.isdir(path):
@@ -612,30 +627,29 @@ class Tagger(QtWidgets.QApplication):
         ignore_hidden = config.setting["ignore_hidden_files"]
         new_files = []
 
-        for root, dirs, files in os.walk(path):
-            if ignore_hidden and is_hidden(root):
+        folders_per_jobs = []
+        files = []
+        temp = []
+        i = 0
+        for entry in os.scandir(path):
+            if ignore_hidden and is_hidden(entry.path):
                 continue
-            for file in files:
-                new_files.extend([os.path.join(root, file)])
-            number_of_files = len(files)
-            if number_of_files:
-                mparms = {
-                    'count': number_of_files,
-                    'directory': root,
-                }
-                log.debug("Adding %(count)d files from '%(directory)r'" %
-                          mparms)
-                self.window.set_statusbar_message(
-                    ngettext(
-                        "Adding %(count)d file from '%(directory)s' ...",
-                        "Adding %(count)d files from '%(directory)s' ...",
-                        number_of_files),
-                    mparms,
-                    translate=None,
-                    echo=None
-                )
-            if not recursive:
-                break
+            if entry.is_dir():
+
+                temp.extend([entry.path])
+                i += 1
+                if i % 200 == 0:
+                    folders_per_jobs.extend([temp])
+                    temp = []
+            else:
+                files.extend([entry.path])
+
+        if recursive:
+            import multiprocessing
+            with multiprocessing.Pool(3) as p:
+                result = p.starmap(Tagger._scan_dir, list(zip([ignore_hidden for _ in range(len(folders_per_jobs))], folders_per_jobs)) )
+                list(map(files.extend, result))
+        new_files = files
 
         if new_files:
             print()
