@@ -290,6 +290,8 @@ class Tagger(QtWidgets.QApplication):
 
         self.loadingThread = None
         self.loadJobs = []
+        self.savingThread = None
+        self.savingJobs = []
 
         # Load release version information
         if self.autoupdate_enabled:
@@ -504,7 +506,31 @@ class Tagger(QtWidgets.QApplication):
             for file in new_files:
                 tagger._file_loaded(file, target=target)
 
-            time.sleep(1) #give time to the UI before continuing
+            time.sleep(0.2) #give time to the UI before continuing
+        #kill thread when finished the work
+
+    @staticmethod
+    def _saver_thread():
+        import time
+        from picard.metadata import Metadata
+        tagger = Tagger.instance()
+        while not tagger.stopping and len(tagger.savingJobs) > 0:
+            files = tagger.savingJobs.pop(0)
+
+            log.debug("Saving files %r", files)
+
+            new_filenames = []
+            for file in files:
+                #file.save(file)
+                file.set_pending()
+                meta = Metadata()
+                meta.copy(file.metadata)
+                new_filenames.extend([file._save_and_rename(file.filename, meta)])
+
+            for (file, filename) in zip(files, new_filenames):
+                file._saving_finished(filename)
+
+            time.sleep(0.2) #give time to the UI before continuing
         #kill thread when finished the work
 
     def add_files(self, filenames, target=None):
@@ -539,10 +565,10 @@ class Tagger(QtWidgets.QApplication):
             new_files_jobs = []
 
             num_files = len(new_files)
-            rem_files_per_job = num_files % 100
-            num_jobs  = (num_files/100) + (1 if rem_files_per_job > 0 else 0)
+            rem_files_per_job = num_files % 50
+            num_jobs  = (num_files/50) + (1 if rem_files_per_job > 0 else 0)
             for i in range(int(num_jobs)):
-                self.loadJobs.extend([new_files[i*100:(i+1)*100]])
+                self.loadJobs.extend([new_files[i*50:(i+1)*50]])
 
             if self.loadingThread is None:
                 self.loadingThread = threading.Thread(target=Tagger._loader_thread, args=[target]).start()
@@ -667,8 +693,15 @@ class Tagger(QtWidgets.QApplication):
     def save(self, objects):
         """Save the specified objects."""
         files = self.get_files_from_objects(objects, save=True)
-        for file in files:
-            file.save()
+
+        num_files = len(files)
+        rem_files_per_job = num_files % 20
+        num_jobs  = (num_files/20) + (1 if rem_files_per_job > 0 else 0)
+        for i in range(int(num_jobs)):
+            self.savingJobs.extend([files[i*20:(i+1)*20]])
+
+        if self.savingThread is None:
+            self.savingThread = threading.Thread(target=Tagger._saver_thread()).start()
 
     def load_album(self, album_id, discid=None):
         album_id = self.mbid_redirects.get(album_id, album_id)
