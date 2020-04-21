@@ -510,6 +510,9 @@ class Tagger(QtWidgets.QApplication):
                 result = file._load_check(file.filename)
                 file._loading_finished(result=result, callback=None)
 
+                if result is None:
+                    new_files.pop(file)
+
             if target is None or target is tagger.unclustered_files:
                 tagger.unclustered_files.add_files(new_files)
                 target = None
@@ -649,12 +652,12 @@ class Tagger(QtWidgets.QApplication):
             return
 
         ignore_hidden = config.setting["ignore_hidden_files"]
-        new_files = []
 
         folders_per_jobs = []
         files = []
         temp = []
         i = 0
+        joblen = 200
         for entry in os.scandir(path):
             if ignore_hidden and is_hidden(entry.path):
                 continue
@@ -662,23 +665,27 @@ class Tagger(QtWidgets.QApplication):
 
                 temp.extend([entry.path])
                 i += 1
-                if i % 200 == 0:
-                    folders_per_jobs.extend([temp])
+                if i % joblen == 0:
+                    folders_per_jobs += [temp]
                     temp = []
             else:
                 files.extend([entry.path])
-
+        if i % joblen > 0:
+            folders_per_jobs += [temp]
         if recursive:
-            import multiprocessing
-            with multiprocessing.Pool(3) as p:
+            mp = None
+            if len(folders_per_jobs) > 100:
+                import multiprocessing as mp
+            else:
+                import multiprocessing.dummy as mp
+            with mp.Pool(3) as p:
                 result = p.starmap(Tagger._scan_dir, list(zip([ignore_hidden for _ in range(len(folders_per_jobs))], folders_per_jobs)) )
                 list(map(files.extend, result))
-        new_files = files
 
-        if new_files:
+        if files:
             print()
             # Function call only if files exist
-            self.add_files(new_files)
+            self.add_files(files)
             pass
         pass
 
