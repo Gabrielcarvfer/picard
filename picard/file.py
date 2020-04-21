@@ -619,9 +619,8 @@ class File(QtCore.QObject, Item):
         files_to_update = []
         #Prevent concurrent access to the list of files to update
         with File.periodicLock:
-            files_to_update = list(File.files_to_update_periodically_dict.items())[:100] #pick up to 100 items to update
-            for (file, signal) in files_to_update:
-                File.files_to_update_periodically_dict.pop(file)
+            files_to_update = File.files_to_update_periodically_dict.items()
+            File.files_to_update_periodically_dict = {}
 
         if len(files_to_update) > 0:
             for (file, signal) in files_to_update:

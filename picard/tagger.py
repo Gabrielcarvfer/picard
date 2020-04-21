@@ -290,6 +290,8 @@ class Tagger(QtWidgets.QApplication):
 
         self.loadingThread = None
         self.loadJobs = []
+        self.loadedFilesThread = None
+        self.loadedFileJobs = []
         self.savingThread = None
         self.savingJobs = []
         self.directoryThread = None
@@ -503,18 +505,40 @@ class Tagger(QtWidgets.QApplication):
             log.debug("Adding files %r", new_files)
             new_files.sort(key=lambda x: x.filename)
 
+            for file in new_files:
+                #file.load(file.filename)
+                result = file._load_check(file.filename)
+                file._loading_finished(result=result, callback=None)
+
             if target is None or target is tagger.unclustered_files:
                 tagger.unclustered_files.add_files(new_files)
                 target = None
 
-            for file in new_files:
-                file.load(file)
-
-            for file in new_files:
-                tagger._file_loaded(file, target=target)
-
+            tagger.loadedFileJobs.extend(zip([target for _ in range(len(new_files))], new_files))
 
             time.sleep(0.2) #give time to the UI before continuing
+
+        #Release worker thread
+        tagger.priority_thread_pool.releaseThread()
+
+        #kill thread when finished the work
+        #But before dying, launch a _loading_finished thread
+        Tagger.loadedFileThread = threading.Thread(target=Tagger._loading_finished).start()
+
+    @staticmethod
+    def _loading_finished():
+        import time
+        tagger = Tagger.instance()
+
+        #Prevent competition with worker threads
+        tagger.priority_thread_pool.reserveThread()
+
+        i = 0
+        for (target, file) in tagger.loadedFileJobs:
+            tagger._file_loaded(file, target=target)
+            i += 1
+            if i % 100 == 0:
+                time.sleep(0.2) #give time to the UI before continuing
 
         #Release worker thread
         tagger.priority_thread_pool.releaseThread()
