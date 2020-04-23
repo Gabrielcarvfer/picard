@@ -607,7 +607,7 @@ class File(QtCore.QObject, Item):
 
 
     @staticmethod
-    def periodicUpdate():
+    def periodicUpdate(files=None):
         File.timer.stop()
 
         from picard.tagger import Tagger
@@ -619,18 +619,28 @@ class File(QtCore.QObject, Item):
         files_to_update = []
         #Prevent concurrent access to the list of files to update
         with File.periodicLock:
-            files_to_update = File.files_to_update_periodically_dict.items()
-            File.files_to_update_periodically_dict = {}
+            if files is None:
+                files_to_update = File.files_to_update_periodically_dict.items()
+                File.files_to_update_periodically_dict = {}
+            else:
+                files_to_update = list(zip(files, [False for _ in range(len(files))]))
+                for file in files:
+                    File.files_to_update_periodically_dict.pop(file)
 
         if len(files_to_update) > 0:
+            signalize = False
             for (file, signal) in files_to_update:
-                file._update(signal)
-
+                #signalize = signalize or signal
+                file._update(False)
+            #if signalize:
+            #    file._update(True)
         #Release worker threads
         tagger.priority_thread_pool.releaseThread()
 
 
         File.timer.start()
+
+
 
     def _update(self, signal=True):
         new_metadata = self.new_metadata

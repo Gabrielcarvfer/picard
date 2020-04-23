@@ -519,14 +519,24 @@ class Tagger(QtWidgets.QApplication):
 
             tagger.loadedFileJobs.extend(zip([target for _ in range(len(new_files))], new_files))
 
-            time.sleep(0.2) #give time to the UI before continuing
+            time.sleep(0.1) #give time to the UI before continuing
 
         #Release worker thread
         tagger.priority_thread_pool.releaseThread()
 
         #kill thread when finished the work
         #But before dying, launch a _loading_finished thread
-        Tagger.loadedFileThread = threading.Thread(target=Tagger._loading_finished).start()
+        #Tagger.loadedFileThread = threading.Thread(target=Tagger._loading_finished).start()
+
+        #File.periodicUpdate()
+
+        i = 0
+        for (target, file) in tagger.loadedFileJobs:
+            tagger._file_loaded(file, target=target)
+            i += 1
+            if i % 100 == 0:
+                time.sleep(0.1) #give time to the UI before continuing
+        #File.periodicUpdate()
 
     @staticmethod
     def _loading_finished():
@@ -534,17 +544,17 @@ class Tagger(QtWidgets.QApplication):
         tagger = Tagger.instance()
 
         #Prevent competition with worker threads
-        tagger.priority_thread_pool.reserveThread()
+        #tagger.priority_thread_pool.reserveThread()
 
         i = 0
         for (target, file) in tagger.loadedFileJobs:
             tagger._file_loaded(file, target=target)
             i += 1
             if i % 100 == 0:
-                time.sleep(0.2) #give time to the UI before continuing
+                time.sleep(0.1) #give time to the UI before continuing
 
         #Release worker thread
-        tagger.priority_thread_pool.releaseThread()
+        #tagger.priority_thread_pool.releaseThread()
 
         #kill thread when finished the work
 
@@ -617,13 +627,12 @@ class Tagger(QtWidgets.QApplication):
                     self.files[filename] = file
                     new_files.extend([file])
         if new_files:
-            new_files_jobs = []
-
+            jobsize = 200
             num_files = len(new_files)
-            rem_files_per_job = num_files % 50
-            num_jobs  = (num_files/50) + (1 if rem_files_per_job > 0 else 0)
+            rem_files_per_job = num_files % jobsize
+            num_jobs  = (num_files/jobsize) + (1 if rem_files_per_job > 0 else 0)
             for i in range(int(num_jobs)):
-                self.loadJobs.extend([new_files[i*50:(i+1)*50]])
+                self.loadJobs.extend([new_files[i*jobsize:(i+1)*jobsize]])
 
             if self.loadingThread is None:
                 self.loadingThread = threading.Thread(target=Tagger._loader_thread, args=[target]).start()

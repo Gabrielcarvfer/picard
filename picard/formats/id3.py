@@ -681,6 +681,9 @@ class MP3File(ID3File):
     _IsMP3 = True
     _File = mutagen.mp3.MP3
 
+    def __init__(self, filename):
+        super().__init__(filename)
+
     def _get_file(self, filename):
         return self._File(filename, ID3=compatid3.CompatID3)
 

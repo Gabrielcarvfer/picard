@@ -120,6 +120,10 @@ class Cluster(QtCore.QObject, Item):
                 file.metadata_images_changed.connect(self.update_metadata_images)
         self.files.extend(files)
         self.metadata['totaltracks'] = len(self.files)
+        if self.metadata['album'] not in ['Unclustered Files']:
+            file.periodicUpdate(files)
+        if self.item == None:
+            return
         self.item.add_files(files)
         if self.can_show_coverart:
             add_metadata_images(self, files)
