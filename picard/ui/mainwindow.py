@@ -1053,8 +1053,10 @@ class MainWindow(QtWidgets.QMainWindow, PreserveGeometry):
         dialog.exec_()
 
     def cluster(self):
-        self.tagger.cluster(self.selected_objects)
-        self.update_actions()
+        import threading
+        threading.Thread(target=self.tagger.cluster, args=[self.selected_objects, self.update_actions]).start()
+        #self.tagger.cluster(self.selected_objects)
+        #self.update_actions()
 
     def refresh(self):
         self.tagger.refresh(self.selected_objects)

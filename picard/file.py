@@ -592,6 +592,7 @@ class File(QtCore.QObject, Item):
                 recording_id = self.metadata['musicbrainz_recordingid']
         self.tagger.acoustidmanager.update(self, recording_id)
         self.update_item()
+        File.periodicUpdate([self])
 
     @classmethod
     def supports_tag(cls, name):
@@ -625,7 +626,8 @@ class File(QtCore.QObject, Item):
             else:
                 files_to_update = list(zip(files, [False for _ in range(len(files))]))
                 for file in files:
-                    File.files_to_update_periodically_dict.pop(file)
+                    if file in File.files_to_update_periodically_dict:
+                        File.files_to_update_periodically_dict.pop(file)
 
         if len(files_to_update) > 0:
             signalize = False
@@ -637,7 +639,7 @@ class File(QtCore.QObject, Item):
         #Release worker threads
         tagger.priority_thread_pool.releaseThread()
 
-
+        #QtCore.QCoreApplication.processEvents()
         File.timer.start()
 
 

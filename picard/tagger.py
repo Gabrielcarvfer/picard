@@ -534,6 +534,7 @@ class Tagger(QtWidgets.QApplication):
         for (target, file) in tagger.loadedFileJobs:
             tagger._file_loaded(file, target=target)
             i += 1
+            #print(i, file.filename)
             if i % 100 == 0:
                 time.sleep(0.1) #give time to the UI before continuing
         #File.periodicUpdate()
@@ -692,7 +693,7 @@ class Tagger(QtWidgets.QApplication):
                 list(map(files.extend, result))
 
         if files:
-            print()
+            #print()
             # Function call only if files exist
             self.add_files(files)
             pass
@@ -961,7 +962,7 @@ class Tagger(QtWidgets.QApplication):
     #  Clusters
     # =======================================================================
 
-    def cluster(self, objs):
+    def cluster(self, objs, callback=None):
         """Group files with similar metadata to 'clusters'."""
         log.debug("Clustering %r", objs)
         if len(objs) <= 1 or self.unclustered_files in objs:
@@ -970,10 +971,12 @@ class Tagger(QtWidgets.QApplication):
             files = self.get_files_from_objects(objs)
         for name, artist, files in Cluster.cluster(files, 1.0):
             QtCore.QCoreApplication.processEvents()
-            cluster = self.load_cluster(name, artist)
+            cluster = self.load_cluster(name, artist) # <---- todo: fix bug
             for file in sorted(files, key=attrgetter('discnumber', 'tracknumber', 'base_filename')):
                 file.move(cluster)
                 QtCore.QCoreApplication.processEvents()
+        if callback is not None:
+            callback()
 
     def load_cluster(self, name, artist):
         for cluster in self.clusters:
