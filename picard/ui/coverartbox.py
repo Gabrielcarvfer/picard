@@ -16,6 +16,7 @@
 # Copyright (C) 2017 Paul Roub
 # Copyright (C) 2017-2019 Antonio Larrosa
 # Copyright (C) 2018 Vishal Choudhary
+# Copyright (C) 2020 Gabriel Ferreira
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -267,6 +268,13 @@ class CoverArtThumbnail(ActiveLabel):
             if not data:
                 # There's no front image, choose the first one available
                 data = [metadata.images[0]]
+
+            # Recover cover art from the metadata cache
+            for image in data:
+                if image._data is not None:
+                    image.set_data(image._data)
+                    image._data = None  # Cleared to prevent issues with possible cover replacements
+
         has_common_images = getattr(metadata, 'has_common_images', True)
         self.set_data(data, has_common_images=has_common_images)
         release = None

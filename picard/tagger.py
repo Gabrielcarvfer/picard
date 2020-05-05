@@ -293,6 +293,11 @@ class Tagger(QtWidgets.QApplication):
         if self.autoupdate_enabled:
             self.updatecheckmanager = UpdateCheckManager(parent=self.window)
 
+        # Cache files metadata to prevent reloading them every single time
+        # Values are organized as {(filename, file size) : metadata}
+        self.metadata_cache = {}
+        self.filesize_cache = {}
+
     def register_cleanup(self, func):
         self.exit_cleanup.append(func)
 
@@ -378,6 +383,11 @@ class Tagger(QtWidgets.QApplication):
             self.nats.update()
 
     def exit(self):
+        for file in self.files.values():
+            for image in file.metadata.images:
+                if image._data is None:
+                    image._data = image.data  # Store file cache back for the next run
+            self.metadata_cache[(file.base_filename, self.filesize_cache[file.base_filename])] = file.metadata
         if self.stopping:
             return
         self.stopping = True
@@ -404,12 +414,18 @@ class Tagger(QtWidgets.QApplication):
             del self._cmdline_files
 
     def run(self):
+        import pickle
         if config.setting["browser_integration"]:
             self.browser_integration.start()
         self.window.show()
         QtCore.QTimer.singleShot(0, self._run_init)
+        if os.path.exists("metadata_cache.pickle"):
+            with open("metadata_cache.pickle", "rb") as cachefile:
+                self.metadata_cache = pickle.load(cachefile)
         res = self.exec_()
         self.exit()
+        with open("metadata_cache.pickle", "wb") as cachefile:
+            pickle.dump(self.metadata_cache, cachefile)
         return res
 
     def event(self, event):
@@ -517,7 +533,11 @@ class Tagger(QtWidgets.QApplication):
                 self.unclustered_files.add_files(new_files)
                 target = None
             for file in new_files:
-                file.load(partial(self._file_loaded, target=target))
+                try:
+                    cached_metadata = self.metadata_cache[file.base_filename, self.filesize_cache[file.base_filename]]
+                except Exception:
+                    cached_metadata = None
+                file.load(partial(self._file_loaded, target=target), cached_metadata)
 
     def _scan_dir(self, ignore_hidden, folders, recursive):
         files = []
@@ -531,6 +551,8 @@ class Tagger(QtWidgets.QApplication):
                 if recursive and entry.is_dir():
                     local_folders.extend([entry.path])
                 else:
+                    filesize = entry.stat().st_size
+                    self.filesize_cache[entry.name] = filesize
                     current_folder_files.extend([entry.path])
 
             number_of_files = len(current_folder_files)
@@ -645,7 +667,15 @@ class Tagger(QtWidgets.QApplication):
         """Save the specified objects."""
         files = self.get_files_from_objects(objects, save=True)
         for file in files:
+            old_basefilename = file.base_filename
+
             file.save()
+
+            stat = os.stat(file.filename)
+            old_filesize = self.filesize_cache.pop(old_basefilename)
+            self.metadata_cache.pop((old_basefilename, old_filesize))
+            self.filesize_cache[file.base_filename] = stat.st_size
+            self.metadata_cache[(file.base_filename, stat.st_size)] = file.metadata
 
     def load_album(self, album_id, discid=None):
         album_id = self.mbid_redirects.get(album_id, album_id)
@@ -824,18 +854,27 @@ class Tagger(QtWidgets.QApplication):
     # =======================================================================
 
     def cluster(self, objs):
+        from pyinstrument import Profiler
+        profiler = Profiler()
+        profiler.start()
         """Group files with similar metadata to 'clusters'."""
         log.debug("Clustering %r", objs)
         if len(objs) <= 1 or self.unclustered_files in objs:
             files = list(self.unclustered_files.files)
         else:
             files = self.get_files_from_objects(objs)
+        #from multiprocessing import Pool
+        #p = Pool(processes=1)
+        #results = p.starmap(func=Cluster.cluster, [files, 1.0])
+        #p.join()
         for name, artist, files in Cluster.cluster(files, 1.0):
             QtCore.QCoreApplication.processEvents()
             cluster = self.load_cluster(name, artist)
             for file in sorted(files, key=attrgetter('discnumber', 'tracknumber', 'base_filename')):
                 file.move(cluster)
                 QtCore.QCoreApplication.processEvents()
+        profiler.stop()
+        print(profiler.output_text(color=True, unicode=True))
 
     def load_cluster(self, name, artist):
         for cluster in self.clusters:

@@ -23,6 +23,7 @@
 # Copyright (C) 2016-2018 Sambhav Kothari
 # Copyright (C) 2017-2018 Antonio Larrosa
 # Copyright (C) 2019 Joel Lintunen
+# Copyright (C) 2020 Gabriel Ferreira
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -150,7 +151,10 @@ class File(QtCore.QObject, Item):
     def new_metadata(self):
         return self.metadata
 
-    def load(self, callback):
+    def load(self, callback, cached_entry=None):
+        if cached_entry is not None:
+            self._loading_finished(callback, cached_entry, None)
+
         thread.run_task(
             partial(self._load_check, self.filename),
             partial(self._loading_finished, callback),

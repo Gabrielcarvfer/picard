@@ -137,6 +137,8 @@ class CoverArtImage:
     sourceprefix = "URL"
 
     def __init__(self, url=None, types=None, comment='', data=None, support_types=None, support_multi_types=None):
+        if data is not None:
+            self._data = data  # Cache file data for the next run
         if types is None:
             self.types = []
         else:
