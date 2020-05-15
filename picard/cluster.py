@@ -110,6 +110,14 @@ class Cluster(QtCore.QObject, Item):
             self.related_album.update()
 
     def add_files(self, files):
+        import threading
+        thread = threading.Thread(target=self._add_files, args=[files])
+        thread.start()
+        thread.join()
+
+    def _add_files(self, files):
+        from picard.util import thread
+        thread.to_main(self.item.add_files, files)
         for file in files:
             self.metadata.length += file.metadata.length
             file._move(self)
@@ -118,10 +126,10 @@ class Cluster(QtCore.QObject, Item):
                 file.metadata_images_changed.connect(self.update_metadata_images)
         self.files.extend(files)
         self.metadata['totaltracks'] = len(self.files)
-        self.item.add_files(files)
         if self.can_show_coverart:
             add_metadata_images(self, files)
         self._update_related_album(added_files=files)
+
 
     def add_file(self, file):
         self.add_files([file])

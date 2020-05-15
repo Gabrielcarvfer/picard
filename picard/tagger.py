@@ -596,6 +596,7 @@ class Tagger(QtWidgets.QApplication):
             event = thread.to_main(self._file_loaded, file, target)
             event.wait()
 
+
     def _loader_process_watchdog_thread(self):
         exitcode = None
         while not self.stopping:
