@@ -20,6 +20,7 @@
 # Copyright (C) 2017 Antonio Larrosa
 # Copyright (C) 2018 Vishal Choudhary
 # Copyright (C) 2019 Joel Lintunen
+# Copyright (C) 2020 Gabriel Ferreira
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -425,11 +426,13 @@ class Album(DataObject, Item):
         if discpregap:
             tm["~discpregap"] = "1"
 
-        # Run track metadata plugins
-        try:
-            run_track_metadata_processors(self, tm, track_node, self._release_node)
-        except BaseException:
-            self.error_append(traceback.format_exc())
+        file_names = [file.new_metadata['title'] for file in self.unmatched_files.files]
+        if track_node['title'] in file_names:
+            # Run track metadata plugins
+            try:
+                run_track_metadata_processors(self, tm, track_node, self._release_node)
+            except BaseException:
+                self.error_append(traceback.format_exc())
 
         return track
 
