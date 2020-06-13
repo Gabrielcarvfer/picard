@@ -787,6 +787,9 @@ class BaseTreeView(QtWidgets.QTreeWidget):
                 self.setCurrentItem(item)
         return QtWidgets.QTreeWidget.moveCursor(self, action, modifiers)
 
+    def visibleColumns(self):
+        return self.header()._visible_columns
+
 
 class FileTreeView(BaseTreeView):
 
@@ -836,11 +839,14 @@ class AlbumTreeView(BaseTreeView):
         else:
             item = AlbumItem(album, True, self)
         item.setIcon(MainPanel.TITLE_COLUMN, AlbumItem.icon_cd)
+
+        visibleColumns = MainPanel.tagger.window.panel._views[1].visibleColumns()
         for i, column in enumerate(MainPanel.columns):
-            font = item.font(i)
-            font.setBold(True)
-            item.setFont(i, font)
-            item.setText(i, album.column(column[1]))
+            if i in visibleColumns:
+                font = item.font(i)
+                font.setBold(True)
+                item.setFont(i, font)
+                item.setText(i, album.column(column[1]))
         self.add_cluster(album.unmatched_files, item)
 
     def remove_album(self, album):
@@ -956,8 +962,10 @@ class AlbumItem(TreeItem):
             else:
                 self.setIcon(MainPanel.TITLE_COLUMN, AlbumItem.icon_cd)
                 self.setToolTip(MainPanel.TITLE_COLUMN, _("Album unchanged"))
+        visibleColumns = MainPanel.tagger.window.panel._views[1].visibleColumns()
         for i, column in enumerate(MainPanel.columns):
-            self.setText(i, album.column(column[1]))
+            if i in visibleColumns:
+                self.setText(i, album.column(column[1]))
         # Workaround for PICARD-1446: Expand/collapse indicator for the release
         # is briefly missing on Windows
         self.emitDataChanged()
@@ -1037,10 +1045,12 @@ class TrackItem(TreeItem):
             self.setToolTip(MainPanel.TITLE_COLUMN, track.error)
         else:
             self.setIcon(MainPanel.TITLE_COLUMN, icon)
+        visibleColumns = MainPanel.tagger.window.panel._views[1].visibleColumns()
         for i, column in enumerate(MainPanel.columns):
-            self.setText(i, track.column(column[1]))
-            self.setForeground(i, color)
-            self.setBackground(i, bgcolor)
+            if i in visibleColumns:
+                self.setText(i, track.column(column[1]))
+                self.setForeground(i, color)
+                self.setBackground(i, bgcolor)
         if update_album:
             self.parent().update(update_tracks=False)
 
@@ -1053,10 +1063,12 @@ class FileItem(TreeItem):
         self.setToolTip(MainPanel.FINGERPRINT_COLUMN, self.decide_fingerprint_icon_info(file))
         color = FileItem.file_colors[file.state]
         bgcolor = get_match_color(file.similarity, TreeItem.base_color)
+        visibleColumns = MainPanel.tagger.window.panel._views[0].visibleColumns()
         for i, column in enumerate(MainPanel.columns):
-            self.setText(i, file.column(column[1]))
-            self.setForeground(i, color)
-            self.setBackground(i, bgcolor)
+            if i in visibleColumns:
+                self.setText(i, file.column(column[1]))
+                self.setForeground(i, color)
+                self.setBackground(i, bgcolor)
         tree_widget = self.treeWidget()
         if tree_widget:
             if not tree_widget.itemWidget(self, MainPanel.FINGERPRINT_COLUMN):
