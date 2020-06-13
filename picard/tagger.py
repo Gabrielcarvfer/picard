@@ -132,7 +132,7 @@ from picard.ui.mainwindow import MainWindow
 from picard.ui.searchdialog.album import AlbumSearchDialog
 from picard.ui.searchdialog.artist import ArtistSearchDialog
 from picard.ui.searchdialog.track import TrackSearchDialog
-
+from queue import Queue
 
 # A "fix" for https://bugs.python.org/issue1438480
 def _patched_shutil_copystat(src, dst, *, follow_symlinks=True):
@@ -290,6 +290,7 @@ class Tagger(QtWidgets.QApplication):
         self.window = MainWindow()
         self.exit_cleanup = []
         self.stopping = False
+        self._priority_event_queue = Queue()
 
         # Load release version information
         if self.autoupdate_enabled:
@@ -422,6 +423,11 @@ class Tagger(QtWidgets.QApplication):
 
     def event(self, event):
         if isinstance(event, thread.ProxyToMainEvent):
+            if not self._priority_event_queue.empty():
+                func, ev = self._priority_event_queue.get_nowait()
+                self._priority_event_queue.task_done()
+                if not ev.isSet():
+                    func()
             event.run()
         elif event.type() == QtCore.QEvent.FileOpen:
             file = event.file()
@@ -487,6 +493,7 @@ class Tagger(QtWidgets.QApplication):
         if target is None:
             log.debug("Aborting move since target is invalid")
             return
+        self.window.set_sorting(False)
         self.window.panel.setUpdatesEnabled(False)
         if isinstance(target, (Track, Cluster)):
             for file in files:
@@ -498,6 +505,7 @@ class Tagger(QtWidgets.QApplication):
             self.move_files_to_album(files, album=target)
         elif isinstance(target, ClusterList):
             self.cluster(files)
+        self.window.set_sorting(True)
         self.window.panel.setUpdatesEnabled(True)
 
     def add_files(self, filenames, target=None, result=None):
@@ -855,8 +863,10 @@ class Tagger(QtWidgets.QApplication):
         for name, artist, files in Cluster.cluster(files, 1.0, self):
             cluster = self.load_cluster(name, artist)
             cluster_files[cluster].extend(sorted(files, key=attrgetter('discnumber', 'tracknumber', 'base_filename')))
-        for cluster, files in result.items():
-            event = thread.to_main(self.move_files, files, cluster)
+        for cluster, files in cluster_files.items():
+            func = partial(self.move_files, files, cluster)
+            event = thread.to_main(func)
+            self._priority_event_queue.put((func, event))
             event.wait()
 
     def load_cluster(self, name, artist):

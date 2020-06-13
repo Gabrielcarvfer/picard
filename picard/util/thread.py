@@ -46,6 +46,8 @@ class ProxyToMainEvent(QEvent):
         self.event = event
 
     def run(self):
+        if self.event and self.event.isSet():
+            return
         self.func(*self.args, **self.kwargs)
         if self.event:
             self.event.set()
@@ -53,12 +55,11 @@ class ProxyToMainEvent(QEvent):
 
 class Runnable(QRunnable):
 
-    def __init__(self, func, next_func, traceback=True, event=None):
+    def __init__(self, func, next_func, traceback=True):
         super().__init__()
         self.func = func
         self.next_func = next_func
         self.traceback = traceback
-        self.event = event
 
     def run(self):
         try:
