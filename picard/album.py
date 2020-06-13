@@ -81,7 +81,7 @@ from picard.track import Track
 from picard.util import (
     find_best_match,
     format_time,
-    mbid_validate,
+    mbid_validate, thread,
 )
 from picard.util.imagelist import (
     add_metadata_images,
@@ -290,6 +290,7 @@ class Album(DataObject, Item):
         if self._requests > 0:
             return
 
+        self.tagger.window.setUpdatesEnabled(False)
         if not self._tracks_loaded:
             artists = set()
             all_media = []
@@ -329,7 +330,7 @@ class Album(DataObject, Item):
                     tracklist_node = medium_node['tracks']
                     for track_node in tracklist_node:
                         absolutetracknumber += 1
-                        track = self._finalize_loading_track(track_node, mm, artists, va, absolutetracknumber, discpregap)
+                        thread.to_main(self._finalize_loading_track, track_node, mm, artists, va, absolutetracknumber, discpregap)
 
                 if "data-tracks" in medium_node:
                     for track_node in medium_node['data-tracks']:
@@ -346,8 +347,8 @@ class Album(DataObject, Item):
                 track.metadata["~totalalbumtracks"] = totalalbumtracks
                 if len(artists) > 1:
                     track.metadata["~multiartist"] = "1"
-            del self._release_node
-            del self._release_artist_nodes
+            #del self._release_node
+            #del self._release_artist_nodes
             self._tracks_loaded = True
 
         if not self._requests:
@@ -375,13 +376,12 @@ class Album(DataObject, Item):
                     file.move(self.unmatched_files)
             self.metadata = self._new_metadata
             self.tracks = self._new_tracks
-            del self._new_metadata
-            del self._new_tracks
+            #del self._new_metadata
+            #del self._new_tracks
             self.loaded = True
             self.status = None
             self.match_files(self.unmatched_files.files)
             self.enable_update_metadata_images(True)
-            self.update()
             self.tagger.window.set_statusbar_message(
                 N_('Album %(id)s loaded: %(artist)s - %(album)s'),
                 {
@@ -394,6 +394,17 @@ class Album(DataObject, Item):
             for func in self._after_load_callbacks:
                 func()
             self._after_load_callbacks = []
+        thread.to_main(self._cleanup)
+        self.tagger.window.setUpdatesEnabled(True)
+
+    def _cleanup(self):
+        del self._release_node
+        del self._release_artist_nodes
+        self.metadata = self._new_metadata
+        self.tracks = self._new_tracks
+        del self._new_metadata
+        del self._new_tracks
+        self.update()
 
     def _finalize_loading_track(self, track_node, metadata, artists, va, absolutetracknumber, discpregap):
         # As noted in `_parse_release` above, the release artist nodes
