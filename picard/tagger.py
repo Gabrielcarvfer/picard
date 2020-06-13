@@ -848,7 +848,6 @@ class Tagger(QtWidgets.QApplication):
             files = self.get_files_from_objects(objs)
 
         thread.run_task(partial(self._cluster, files),
-                        partial(self._finish_cluster, None),
                         traceback=self._debug)
 
     def _cluster(self, files):
@@ -856,12 +855,9 @@ class Tagger(QtWidgets.QApplication):
         for name, artist, files in Cluster.cluster(files, 1.0):
             cluster = self.load_cluster(name, artist)
             cluster_files[cluster].extend(sorted(files, key=attrgetter('discnumber', 'tracknumber', 'base_filename')))
-        return cluster_files
-
-    def _finish_cluster(self, *args, result):
-        if result:
-            for cluster, files in result.items():
-                self.move_files(files, cluster)
+        for cluster, files in result.items():
+            event = thread.to_main(self.move_files, files, cluster)
+            event.wait()
 
     def load_cluster(self, name, artist):
         for cluster in self.clusters:
