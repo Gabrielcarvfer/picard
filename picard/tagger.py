@@ -43,6 +43,7 @@
 
 
 import argparse
+from collections import defaultdict
 from functools import partial
 from itertools import chain
 import logging
@@ -486,18 +487,18 @@ class Tagger(QtWidgets.QApplication):
         if target is None:
             log.debug("Aborting move since target is invalid")
             return
+        self.window.panel.setUpdatesEnabled(False)
         if isinstance(target, (Track, Cluster)):
             for file in files:
                 file.move(target)
-                QtCore.QCoreApplication.processEvents()
         elif isinstance(target, File):
             for file in files:
                 file.move(target.parent)
-                QtCore.QCoreApplication.processEvents()
         elif isinstance(target, Album):
             self.move_files_to_album(files, album=target)
         elif isinstance(target, ClusterList):
             self.cluster(files)
+        self.window.panel.setUpdatesEnabled(True)
 
     def add_files(self, filenames, target=None, result=None):
         """Add files to the tagger."""
@@ -846,14 +847,21 @@ class Tagger(QtWidgets.QApplication):
         else:
             files = self.get_files_from_objects(objs)
 
-        self.window.set_sorting(False)
+        thread.run_task(partial(self._cluster, files),
+                        partial(self._finish_cluster, None),
+                        traceback=self._debug)
+
+    def _cluster(self, files):
+        cluster_files = defaultdict(list)
         for name, artist, files in Cluster.cluster(files, 1.0):
-            QtCore.QCoreApplication.processEvents()
             cluster = self.load_cluster(name, artist)
-            for file in sorted(files, key=attrgetter('discnumber', 'tracknumber', 'base_filename')):
-                file.move(cluster)
-                QtCore.QCoreApplication.processEvents()
-        self.window.set_sorting(True)
+            cluster_files[cluster].extend(sorted(files, key=attrgetter('discnumber', 'tracknumber', 'base_filename')))
+        return cluster_files
+
+    def _finish_cluster(self, *args, result):
+        if result:
+            for cluster, files in result.items():
+                self.move_files(files, cluster)
 
     def load_cluster(self, name, artist):
         for cluster in self.clusters:
