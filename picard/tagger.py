@@ -852,7 +852,7 @@ class Tagger(QtWidgets.QApplication):
 
     def _cluster(self, files):
         cluster_files = defaultdict(list)
-        for name, artist, files in Cluster.cluster(files, 1.0):
+        for name, artist, files in Cluster.cluster(files, 1.0, self):
             cluster = self.load_cluster(name, artist)
             cluster_files[cluster].extend(sorted(files, key=attrgetter('discnumber', 'tracknumber', 'base_filename')))
         for cluster, files in result.items():
