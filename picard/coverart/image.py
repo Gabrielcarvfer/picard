@@ -60,21 +60,15 @@ _datafile_mutex = QMutex(QMutex.Recursive)
 class DataHash:
 
     def __init__(self, data, prefix='picard', suffix=''):
-        self._filename = None
         _datafile_mutex.lock()
         try:
             m = md5()
             m.update(data)
             self._hash = m.hexdigest()
             if self._hash not in _datafiles:
-                (fd, self._filename) = tempfile.mkstemp(prefix=prefix, suffix=suffix)
-                QObject.tagger.register_cleanup(self.delete_file)
-                with os.fdopen(fd, "wb") as imagefile:
-                    imagefile.write(data)
-                _datafiles[self._hash] = self._filename
-                log.debug("Saving image data %s to %r" % (self._hash, self._filename))
-            else:
-                self._filename = _datafiles[self._hash]
+                _datafiles[self._hash] = {'data': data, 'refs': 0}
+                log.debug("Saving image data %s" % (self._hash))
+            _datafiles[self._hash]['refs'] += 1
         finally:
             _datafile_mutex.unlock()
 
@@ -85,30 +79,24 @@ class DataHash:
         return self._hash
 
     def delete_file(self):
-        if self._filename:
-            try:
-                os.unlink(self._filename)
-            except BaseException:
-                pass
-            else:
-                _datafile_mutex.lock()
-                try:
-                    self._filename = None
-                    del _datafiles[self._hash]
-                    self._hash = None
-                finally:
-                    _datafile_mutex.unlock()
+       _datafile_mutex.lock()
+       try:
+           _datafiles[self._hash]['refs'] -= 1
+           if _datafiles[self._hash]['refs'] == 0:
+               del _datafiles[self._hash]
+           self._hash = None
+       finally:
+           _datafile_mutex.unlock()
 
     @property
     def data(self):
-        if self._filename:
-            with open(self._filename, "rb") as imagefile:
-                return imagefile.read()
+        if self._hash:
+            return _datafiles[self._hash]['data']
         return None
 
     @property
     def filename(self):
-        return self._filename
+        return self._hash
 
 
 class CoverArtImageError(Exception):
