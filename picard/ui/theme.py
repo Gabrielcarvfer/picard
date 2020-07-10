@@ -82,15 +82,36 @@ class BaseTheme:
         if accent_color:
             accent_text_color = QtCore.Qt.white if accent_color.lightness() < 160 else QtCore.Qt.black
             palette.setColor(QtGui.QPalette.Active, QtGui.QPalette.HighlightedText, accent_text_color)
-            palette.setColor(QtGui.QPalette.Inactive, QtGui.QPalette.HighlightedText, accent_text_color)
+
+            if accent_text_color == QtCore.Qt.white:
+                contrasting_accent_color = accent_color.lighter()
+            else:
+                contrasting_accent_color = accent_color.darker()
+
+            # Get nearest gray to contrasting_accent_color
+
+            #dr = ((r-r)**2 + (r-g)**2 + (r-b)**2) ** (1/2)
+            #dg = ((g-r)**2 + (g-g)**2 + (g-b)**2) ** (1/2)
+            #db = ((b-r)**2 + (b-g)**2 + (b-b)**2) ** (1/2)
+            #res = r if dr < dg and dr < db else (g if dr < db else b)
+
+            r, g, b, alpha = contrasting_accent_color.getRgb()
+            res = (0.299*(r**2) + 0.587*(g**2) + 0.114*(b**2)) ** (1/2)
+            min_accent_component = min(accent_color.getRgb())
+            if res < min_accent_component:
+               res = (res + min_accent_component) / 2
+            contrasting_accent_color = QtGui.QColor(res, res, res, alpha)
+            contrasting_accent_text_color = QtCore.Qt.white if contrasting_accent_color.lightness() < 160 else QtCore.Qt.black
+            palette.setColor(QtGui.QPalette.Inactive, QtGui.QPalette.HighlightedText, contrasting_accent_text_color)
+
             if dark_theme:
                 palette.setColor(QtGui.QPalette.Link, accent_color.lighter())
-                palette.setColor(QtGui.QPalette.Active, QtGui.QPalette.Highlight, accent_color.lighter())
-                palette.setColor(QtGui.QPalette.Inactive, QtGui.QPalette.Highlight, accent_color)
+                palette.setColor(QtGui.QPalette.Active, QtGui.QPalette.Highlight, accent_color)
+                palette.setColor(QtGui.QPalette.Inactive, QtGui.QPalette.Highlight, contrasting_accent_color)
             else:
                 palette.setColor(QtGui.QPalette.Link, accent_color)
                 palette.setColor(QtGui.QPalette.Active, QtGui.QPalette.Highlight, accent_color)
-                palette.setColor(QtGui.QPalette.Inactive, QtGui.QPalette.Highlight, accent_color.lighter())
+                palette.setColor(QtGui.QPalette.Inactive, QtGui.QPalette.Highlight, contrasting_accent_color)
 
 
 if IS_WIN:
