@@ -46,6 +46,7 @@ import argparse
 from collections import defaultdict
 from functools import partial
 import logging
+import multiprocessing as mp
 import os.path
 import platform
 import re
@@ -145,6 +146,28 @@ def _patched_shutil_copystat(src, dst, *, follow_symlinks=True):
 
 _orig_shutil_copystat = shutil.copystat
 shutil.copystat = _patched_shutil_copystat
+
+
+def _scan_paths_recursive(paths, recursive, ignore_hidden):
+    local_paths = list(paths)
+    files = []
+    warnings = []
+    while local_paths:
+        current_path = local_paths.pop(0)
+        try:
+            if os.path.isdir(current_path):
+                for entry in os.scandir(current_path):
+                    if ignore_hidden and is_hidden(entry.path):
+                        continue
+                    if recursive and entry.is_dir():
+                        local_paths.append(entry.path)
+                    else:
+                        files.append(entry.path)
+            else:
+                files.append(current_path)
+        except OSError as err:
+            warnings.append(err)
+    return files, warnings
 
 
 class Tagger(QtWidgets.QApplication):
@@ -548,30 +571,25 @@ class Tagger(QtWidgets.QApplication):
                 if i % 17 == 0:
                     QtCore.QCoreApplication.processEvents()
 
-    @staticmethod
-    def _scan_paths_recursive(paths, recursive, ignore_hidden):
-        local_paths = list(paths)
-        while local_paths:
-            current_path = local_paths.pop(0)
-            try:
-                if os.path.isdir(current_path):
-                    for entry in os.scandir(current_path):
-                        if ignore_hidden and is_hidden(entry.path):
-                            continue
-                        if recursive and entry.is_dir():
-                            local_paths.append(entry.path)
-                        else:
-                            yield entry.path
-                else:
-                    yield current_path
-            except OSError as err:
-                log.warning(err)
+    def add_paths_thread(self, paths, target):
+        # let secondary thread remain blocked waiting for the worker process results
+        with mp.Pool(processes=1) as pool:
+            files, warnings = pool.starmap(func=_scan_paths_recursive,
+                                           iterable=((paths,
+                                                      config.setting['recursively_add_files'],
+                                                      config.setting["ignore_hidden_files"]),
+                                                     )
+                                           )[0]
+            for warning in warnings:
+                log.warning(warning)
+            thread.to_main(self.add_files, files, target)
 
     def add_paths(self, paths, target=None):
-        files = self._scan_paths_recursive(paths,
-                            config.setting['recursively_add_files'],
-                            config.setting["ignore_hidden_files"])
-        self.add_files(files, target=target)
+        # _scan_paths_recursive can take too much time and block the main thread,
+        # so we let other process do the work and keep the UI process free
+        thread.run_task(partial(self.add_paths_thread, paths, target),
+                        None
+                        )
 
     def get_file_lookup(self):
         """Return a FileLookup object."""
