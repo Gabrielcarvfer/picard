@@ -62,9 +62,11 @@ class Runnable(QRunnable):
             from picard import log
             if self.traceback:
                 log.error(traceback.format_exc())
-            to_main(self.next_func, error=sys.exc_info()[1])
+            if self.next_func:
+                to_main(self.next_func, error=sys.exc_info()[1])
         else:
-            to_main(self.next_func, result=result)
+            if self.next_func:
+                to_main(self.next_func, result=result)
 
 
 def run_task(func, next_func, priority=0, thread_pool=None, traceback=True):
